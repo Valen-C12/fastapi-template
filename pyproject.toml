@@ -1,0 +1,54 @@
+[project]
+name = "layer-craft-backend"
+version = "1.0.0"
+description = "layer craft server"
+authors = [{ name = "wangwenlong@c12.ai" }]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi (>=0.116.1,<0.117.0)",
+    "sqlalchemy (>=2.0.42,<3.0.0)",
+    "alembic (>=1.16.4,<2.0.0)",
+    "httpx (>=0.28.1,<0.29.0)",
+    "python-dotenv (>=1.1.1,<2.0.0)",
+    "pydantic-settings (>=2.10.1,<3.0.0)",
+    "psycopg[binary] (>=3.2.9,<4.0.0)",
+    "uvicorn[standard] (>=0.35.0,<0.36.0)",
+    "greenlet (>=3.2.3,<4.0.0)",
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.1"
+pytest-asyncio = "^1.1.0"
+black = "^25.1.0"
+ruff = "^0.12.7"
+
+[tool.black]
+line-length = 100                # 預設值是 88
+skip-string-normalization = true # 不強制把單引號變成雙引號
+
+[tool.ruff]
+line-length = 120
+select = [
+    "E",   # pycodestyle error
+    "W",   # pycodestyle warning
+    "F",   # pyflakes
+    "A",   # flakes8-builtins
+    "COM", # flakes8-commas
+    "C4",  # flake8-comprehensions
+    "Q",   # flake8-quotes
+    "SIM", # flake8-simplify
+    "PTH", # flake8-use-pathlib
+    "I",   # isort
+    "N",   # pep8 naming
+    "UP",  # pyupgrade  
+    "S",   # bandit
+]
+
+[tool.ruff.flake8-builtins]
+builtins-ignorelist = ["id"]
