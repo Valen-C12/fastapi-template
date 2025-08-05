@@ -1,41 +1,19 @@
 from pydantic import BaseModel
 
+from app.data.schema_factory import create_dynamic_schemas
+
 
 class ItemBase(BaseModel):
     title: str
     description: str | None = None
+    is_active: bool = True
 
 
-class ItemCreate(ItemBase):
-    pass
-
-
-class ItemRead(ItemBase):
-    id: int
-
-    class Config:
-        from_attributes = True
-
-
-class ItemUpdate(BaseModel):
-    title: str | None = None
-    description: str | None = None
+ItemCreate, ItemUpdate, ItemRead = create_dynamic_schemas(ItemBase)
 
 
 class UserBase(BaseModel):
     pass
 
 
-class UserCreate(UserBase):
-    pass
-
-
-class UserRead(UserBase):
-    id: int
-
-    class Config:
-        from_attributes = True
-
-
-class UserUpdate(BaseModel):
-    pass
+UserCreate, UserUpdate, UserRead = create_dynamic_schemas(UserBase)

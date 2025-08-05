@@ -58,9 +58,9 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
         # 将 Pydantic 模型转换为字典
         update_data = (
-            obj_in.model_dump(exclude_unset=True)
+            obj_in.model_dump(exclude_unset=True, exclude_none=True)
             if isinstance(obj_in, BaseModel)
-            else obj_in
+            else {k: v for k, v in obj_in.items() if v is not None}
         )
 
         # 遍历更新数据，并更新模型实例的相应字段
