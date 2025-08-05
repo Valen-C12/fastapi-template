@@ -2,8 +2,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.data.base_crud import CRUDBase
-from app.data.models import Item
-from app.data.schemas import ItemCreate, ItemUpdate
+from app.data.models import Item, User
+from app.data.schemas import ItemCreate, ItemUpdate, UserCreate, UserUpdate
 
 
 class CRUDItem(CRUDBase[Item, ItemCreate, ItemUpdate]):
@@ -18,3 +18,4 @@ class CRUDItem(CRUDBase[Item, ItemCreate, ItemUpdate]):
 
 
 item = CRUDItem(Item)
+user = CRUDBase[User, UserCreate, UserUpdate](User)
