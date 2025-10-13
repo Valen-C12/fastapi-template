@@ -46,6 +46,29 @@
 
 ## 🚀 快速开始
 
+### 方式 1: Docker Compose (推荐) 🐳
+
+使用所有服务 (PostgreSQL, Redis, MinIO) 的最快方式:
+
+```bash
+# 克隆仓库
+git clone <repository-url>
+cd template
+
+# 使用 Docker Compose 启动所有服务
+docker-compose up -d
+
+# 查看日志
+docker-compose logs -f app
+
+# 访问 API
+# API: http://localhost:8000
+# 文档: http://localhost:8000/docs
+# MinIO 控制台: http://localhost:9001 (minioadmin/minioadmin)
+```
+
+### 方式 2: 本地开发
+
 ### 1. 克隆和设置
 
 ```bash
@@ -298,17 +321,59 @@ pre-commit run --all-files
 - **工厂模式 (Factory Pattern)**: 创建对象而不指定具体类
 - **单例模式 (Singleton Pattern)**: 确保单一实例（Redis、S3 客户端）
 
-## 🚢 部署
+## 🔍 基础设施测试
+
+测试所有基础设施服务 (数据库, Redis, S3):
+
+```bash
+# 运行测试脚本
+python test_infrastructure.py
+
+# 或通过 API 检查健康状态
+curl http://localhost:8000/api/health/detailed
+```
+
+参见 [TESTING_INFRASTRUCTURE_zh.md](TESTING_INFRASTRUCTURE_zh.md) 获取详细测试指南。
+
+## 🐳 Docker 和 CI/CD
 
 ### Docker
+
+**生产就绪的多阶段 Dockerfile:**
+- 基于 Python 3.12 Alpine
+- 最终镜像大小约 250MB
+- 以非 root 用户运行
+- 包含健康检查
 
 ```bash
 # 构建镜像
 docker build -t fastapi-template .
 
-# 运行容器
+# 使用 docker-compose 运行 (包含 PostgreSQL, Redis, MinIO)
+docker-compose up -d
+
+# 独立运行
 docker run -p 8000:8000 --env-file .env fastapi-template
 ```
+
+### GitHub Actions CI/CD
+
+包含自动化工作流:
+
+**持续集成 (`.github/workflows/ci.yml`)**
+- ✅ 使用 Ruff 进行代码检查
+- ✅ 使用 Pyright 进行类型检查
+- ✅ 使用 pytest 进行测试
+- ✅ 使用 Bandit 进行安全扫描
+- ✅ 依赖漏洞检查
+
+**Docker 构建 (`.github/workflows/docker-build.yml`)**
+- ✅ 多平台构建 (amd64, arm64)
+- ✅ 自动标记 (latest, branch, SHA)
+- ✅ 使用 Trivy 进行安全扫描
+- ✅ 推送到 GHCR, Docker Hub, 或 AWS ECR
+
+参见 [docs/DOCKER_AND_CI_zh.md](docs/DOCKER_AND_CI_zh.md) 获取完整的 Docker 和 CI/CD 文档。
 
 ### 环境变量
 
@@ -316,37 +381,15 @@ docker run -p 8000:8000 --env-file .env fastapi-template
 
 ## 📚 文档
 
-- **API 文档**: 访问 `/docs` (Swagger UI)
-- **备选文档**: 访问 `/redoc` (ReDoc)
-- **健康检查**: 访问 `/health`
+### API 文档
+- **Swagger UI**: 访问 `/docs`
+- **ReDoc**: 访问 `/redoc`
+- **健康检查**: 访问 `/health` 和 `/api/health/detailed`
 
-## 🔍 测试基础设施
-
-我们提供了多种方式来测试你的基础设施服务：
-
-### 方法 1: 自动化测试脚本
-
-```bash
-# 安装 rich 获得更好的输出（可选）
-pip install rich
-
-# 运行测试脚本
-python test_infrastructure.py
-```
-
-### 方法 2: API 健康检查端点
-
-```bash
-# 启动应用后访问
-curl http://localhost:8000/health/detailed
-
-# 或访问各个服务的健康检查
-curl http://localhost:8000/health/database
-curl http://localhost:8000/health/redis
-curl http://localhost:8000/health/s3
-```
-
-详细的测试指南请查看 [基础设施测试指南](TESTING_INFRASTRUCTURE_zh.md)
+### 指南
+- [TESTING_INFRASTRUCTURE_zh.md](TESTING_INFRASTRUCTURE_zh.md) - 测试数据库、Redis 和 S3
+- [docs/DOCKER_AND_CI_zh.md](docs/DOCKER_AND_CI_zh.md) - Docker 设置和 CI/CD 工作流
+- [docs/S3_ALTERNATIVES_zh.md](docs/S3_ALTERNATIVES_zh.md) - S3 兼容存储选项
 
 ## 🤝 贡献
 

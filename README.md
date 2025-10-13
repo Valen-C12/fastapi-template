@@ -46,6 +46,29 @@ A production-ready FastAPI template with modern architecture patterns, comprehen
 
 ## 🚀 Quick Start
 
+### Option 1: Docker Compose (Recommended) 🐳
+
+The fastest way to get started with all services (PostgreSQL, Redis, MinIO):
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd template
+
+# Start all services with Docker Compose
+docker-compose up -d
+
+# View logs
+docker-compose logs -f app
+
+# Access the API
+# API: http://localhost:8000
+# Docs: http://localhost:8000/docs
+# MinIO Console: http://localhost:9001 (minioadmin/minioadmin)
+```
+
+### Option 2: Local Development
+
 ### 1. Clone and Setup
 
 ```bash
@@ -298,17 +321,59 @@ pre-commit run --all-files
 - **Factory Pattern**: Creates objects without specifying exact classes
 - **Singleton Pattern**: Ensures single instance (Redis, S3 clients)
 
-## 🚢 Deployment
+## 🔍 Infrastructure Testing
+
+Test all infrastructure services (Database, Redis, S3):
+
+```bash
+# Run the test script
+python test_infrastructure.py
+
+# Or check health via API
+curl http://localhost:8000/api/health/detailed
+```
+
+See [TESTING_INFRASTRUCTURE.md](TESTING_INFRASTRUCTURE.md) for detailed testing guide.
+
+## 🐳 Docker & CI/CD
 
 ### Docker
+
+**Multi-stage production-ready Dockerfile:**
+- Based on Python 3.12 Alpine
+- ~250MB final image size
+- Runs as non-root user
+- Includes health checks
 
 ```bash
 # Build image
 docker build -t fastapi-template .
 
-# Run container
+# Run with docker-compose (includes PostgreSQL, Redis, MinIO)
+docker-compose up -d
+
+# Run standalone
 docker run -p 8000:8000 --env-file .env fastapi-template
 ```
+
+### GitHub Actions CI/CD
+
+Automated workflows included:
+
+**Continuous Integration (`.github/workflows/ci.yml`)**
+- ✅ Linting with Ruff
+- ✅ Type checking with Pyright
+- ✅ Testing with pytest
+- ✅ Security scanning with Bandit
+- ✅ Dependency vulnerability checks
+
+**Docker Build (`.github/workflows/docker-build.yml`)**
+- ✅ Multi-platform builds (amd64, arm64)
+- ✅ Automatic tagging (latest, branch, SHA)
+- ✅ Security scanning with Trivy
+- ✅ Push to GHCR, Docker Hub, or AWS ECR
+
+See [docs/DOCKER_AND_CI.md](docs/DOCKER_AND_CI.md) for complete Docker and CI/CD documentation.
 
 ### Environment Variables
 
@@ -316,9 +381,15 @@ All configuration is done via environment variables. See `.env.example` for all 
 
 ## 📚 Documentation
 
-- **API Documentation**: Available at `/docs` (Swagger UI)
-- **Alternative Docs**: Available at `/redoc` (ReDoc)
-- **Health Check**: Available at `/health`
+### API Documentation
+- **Swagger UI**: Available at `/docs`
+- **ReDoc**: Available at `/redoc`
+- **Health Check**: Available at `/health` and `/api/health/detailed`
+
+### Guides
+- [TESTING_INFRASTRUCTURE.md](TESTING_INFRASTRUCTURE.md) - Testing database, Redis, and S3
+- [docs/DOCKER_AND_CI.md](docs/DOCKER_AND_CI.md) - Docker setup and CI/CD workflows
+- [docs/S3_ALTERNATIVES.md](docs/S3_ALTERNATIVES.md) - S3-compatible storage options
 
 ## 🤝 Contributing
 
