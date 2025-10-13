@@ -21,7 +21,6 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         request: Request,
         call_next: RequestResponseEndpoint,
     ) -> Response:
-
         request_id = str(int(time.time() * 1000))  # 简单生成请求ID
         start_time = time.time()
 

@@ -27,9 +27,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         result = await db.get(self.model, id)
         return result
 
-    async def get_multi(
-        self, db: AsyncSession, *, skip: int = 0, limit: int = 100
-    ) -> list[ModelType]:
+    async def get_multi(self, db: AsyncSession, *, skip: int = 0, limit: int = 100) -> list[ModelType]:
         """获取多个对象，支持分页"""
         query = select(self.model).offset(skip).limit(limit)
         result = await db.execute(query)

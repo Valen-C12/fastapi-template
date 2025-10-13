@@ -22,9 +22,7 @@ async def check_item_deletable(id: int, db: AsyncSession = Depends(get_db)):
 
     # 示例校验逻辑 2: 假设我们不允许删除标题为 "default" 的项目
     if item.title == "default":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Default items cannot be deleted."
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Default items cannot be deleted.")
 
     return item
 
