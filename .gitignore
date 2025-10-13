@@ -43,3 +43,5 @@ poetry/core/*
 # project custom ignores
 .env*
 !.env.example
+
+.spec-workflow
