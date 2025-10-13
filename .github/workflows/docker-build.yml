@@ -75,6 +75,7 @@ jobs:
             type=ref,event=pr
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix={{branch}}-
+            type=sha,format=long
 
       - name: Determine target environment
         id: env
@@ -107,6 +108,7 @@ jobs:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
           format: 'sarif'
           output: 'trivy-results.sarif'
+        continue-on-error: true
 
       - name: Upload Trivy results to GitHub Security
         if: github.event_name != 'pull_request'
