@@ -1,51 +1,115 @@
-from fastapi import Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+"""
+Item routes using Service Layer pattern.
 
-from app.api.router_factory import CRUDRouter
-from app.data import crud
-from app.data.database import get_db
+This module demonstrates the new architecture:
+- Thin controllers (routes only handle HTTP concerns)
+- Business logic in services
+- Data access in repositories
+
+Migration from old CRUD factory pattern to Service Layer.
+"""
+
+from fastapi import APIRouter, status
+
+from app.api.dependencies import ItemServiceDep
 from app.data.schemas import ItemCreate, ItemRead, ItemUpdate
 
+router = APIRouter(prefix="/items", tags=["items"])
 
-async def check_item_deletable(id: int, db: AsyncSession = Depends(get_db)):
+
+@router.get("/", response_model=list[ItemRead])
+async def get_items(
+    service: ItemServiceDep,
+    skip: int = 0,
+    limit: int = 100,
+    active_only: bool = False,
+):
     """
-    一个依赖项，用于在删除 Item 前执行特殊校验。
-    如果校验失败，它会抛出 HTTP 异常。
-    如果成功，它什么也不做，请求会继续向下执行。
+    Get all items with optional filtering.
+
+    Query params:
+    - skip: Number of items to skip (pagination)
+    - limit: Maximum number of items to return
+    - active_only: If true, return only active items
     """
-    print(f"Executing special delete check for item {id}...")
-
-    # 示例校验逻辑 1: 从数据库获取 item
-    item = await crud.item.get(db, id=id)
-    if not item:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
-
-    # 示例校验逻辑 2: 假设我们不允许删除标题为 "default" 的项目
-    if item.title == "default":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Default items cannot be deleted.")
-
-    return item
+    return await service.get_items(skip=skip, limit=limit, active_only=active_only)
 
 
-router = CRUDRouter(
-    crud=crud.item,
-    schema=ItemRead,
-    create_schema=ItemCreate,
-    update_schema=ItemUpdate,
-    prefix="/items",
-    tags=["items"],
-    dependencies={"delete": [Depends(check_item_deletable)]},
-).router
+@router.get("/{item_id}", response_model=ItemRead)
+async def get_item(
+    item_id: int,
+    service: ItemServiceDep,
+):
+    """Get a single item by ID."""
+    return await service.get_item(item_id)
+
+
+@router.post("/", response_model=ItemRead, status_code=status.HTTP_201_CREATED)
+async def create_item(
+    item_data: ItemCreate,
+    service: ItemServiceDep,
+):
+    """
+    Create a new item.
+
+    Business rules (enforced in service layer):
+    - Title must be unique
+    """
+    return await service.create_item(item_data)
+
+
+@router.put("/{item_id}", response_model=ItemRead)
+async def update_item(
+    item_id: int,
+    item_data: ItemUpdate,
+    service: ItemServiceDep,
+):
+    """
+    Update an existing item.
+
+    Business rules (enforced in service layer):
+    - If title is changed, must be unique
+    """
+    return await service.update_item(item_id, item_data)
+
+
+@router.delete("/{item_id}", response_model=ItemRead)
+async def delete_item(
+    item_id: int,
+    service: ItemServiceDep,
+):
+    """
+    Delete an item.
+
+    Business rules (enforced in service layer):
+    - Cannot delete items with title 'default'
+    """
+    return await service.delete_item(item_id)
 
 
 @router.post("/{item_id}/publish", response_model=ItemRead)
 async def publish_item(
     item_id: int,
-    db: AsyncSession = Depends(get_db),
+    service: ItemServiceDep,
 ):
-    print(f"Publishing item {item_id}...")
-    db_item = await crud.item.get(db=db, id=item_id)
-    if not db_item:
-        raise HTTPException(status_code=404, detail="Item not found")
-    # ... 在这里执行发布的逻辑 ...
-    return db_item
+    """
+    Publish an item (mark as active).
+
+    This demonstrates a custom business operation beyond basic CRUD.
+    """
+    return await service.publish_item(item_id)
+
+
+@router.get("/owner/{owner_id}", response_model=list[ItemRead])
+async def get_items_by_owner(
+    owner_id: int,
+    service: ItemServiceDep,
+    skip: int = 0,
+    limit: int = 100,
+):
+    """
+    Get all items owned by a specific user.
+
+    This demonstrates cross-entity operations coordinated by the service layer.
+    """
+    return await service.get_items_by_owner(owner_id, skip=skip, limit=limit)

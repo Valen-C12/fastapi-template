@@ -7,10 +7,10 @@ A production-ready FastAPI template with modern architecture patterns, comprehen
 ## 🌟 Features
 
 ### Core Architecture
+- **Service Layer Pattern** - Business logic coordination and transaction management
 - **Repository Pattern** - Clean data access abstraction
-- **Unit of Work Pattern** - Coordinated transaction management
-- **Specification Pattern** - Flexible query composition
-- **Dependency Injection** - Loosely coupled components
+- **Dependency Injection** - Loosely coupled components via FastAPI DI
+- **SOLID Principles** - Maintainable, testable, and extensible code
 
 ### Database
 - **PostgreSQL** with SQLAlchemy 2.0
@@ -158,26 +158,29 @@ The API will be available at:
 template/
 ├── app/
 │   ├── api/
-│   │   ├── routers/          # API route handlers
-│   │   │   ├── items.py      # Example CRUD endpoints
-│   │   │   └── users.py      # User endpoints
-│   │   └── router_factory.py # Router generation utilities
+│   │   ├── routers/          # API route handlers (thin controllers)
+│   │   │   ├── items.py      # Item endpoints
+│   │   │   ├── users.py      # User endpoints
+│   │   │   └── health.py     # Health check endpoints
+│   │   └── dependencies.py   # Service dependency injection
 │   ├── core/
 │   │   ├── config.py         # Application configuration
 │   │   ├── lifespan.py       # Startup/shutdown logic
 │   │   ├── logging.py        # Logging middleware
 │   │   ├── exceptions.py     # Custom exception classes
 │   │   └── exception_handlers.py  # Global exception handlers
+│   ├── services/             # Service Layer (business logic)
+│   │   ├── base.py           # Base service with transaction management
+│   │   ├── item_service.py   # Item business logic
+│   │   └── user_service.py   # User business logic
+│   ├── repositories/         # Repository Layer (data access)
+│   │   ├── base.py           # Generic repository base class
+│   │   ├── item.py           # Item repository
+│   │   └── user.py           # User repository
 │   ├── data/
-│   │   ├── database.py       # Database connection
+│   │   ├── database.py       # Database connection & session
 │   │   ├── models.py         # SQLAlchemy models
-│   │   ├── schemas.py        # Pydantic schemas
-│   │   ├── crud.py           # CRUD operations
-│   │   ├── base_crud.py      # Base CRUD class
-│   │   ├── unit_of_work.py   # Unit of Work implementation
-│   │   └── repositories/     # Repository pattern implementations
-│   │       ├── base.py       # Base repository & specifications
-│   │       └── __init__.py
+│   │   └── schemas.py        # Pydantic schemas (Create/Update/Read)
 │   ├── infrastructure/       # External service integrations
 │   │   ├── redis_client.py   # Redis connection & helpers
 │   │   └── s3_client.py      # S3 client wrapper
@@ -190,44 +193,145 @@ template/
 
 ## 💡 Usage Examples
 
-### Using Repository Pattern
+### Architecture Overview
 
-```python
-from app.data.models import Item
-from app.data.unit_of_work import SQLAlchemyUnitOfWork
+This template follows the **Service Layer Pattern** for clean separation of concerns:
 
-async def create_item_example():
-    async with SQLAlchemyUnitOfWork() as uow:
-        # Get repository for Item model
-        item_repo = uow.repository(Item)
-
-        # Create new item
-        item = Item(name="Example", description="Test item")
-        created_item = await item_repo.create(uow.session, item)
-
-        # Changes committed automatically on context exit
-
-    return created_item
+```
+┌─────────────────────────────────────────┐
+│         Routes (HTTP Layer)             │
+│  - Thin controllers                     │
+│  - HTTP concerns only                   │
+│  - Depend on services via DI            │
+└────────────┬────────────────────────────┘
+             │
+┌────────────▼────────────────────────────┐
+│      Service Layer                      │
+│  - Business logic                       │
+│  - Transaction management               │
+│  - Coordinates repositories             │
+└────────────┬────────────────────────────┘
+             │
+┌────────────▼────────────────────────────┐
+│      Repository Layer                   │
+│  - Data access abstraction              │
+│  - No commits (delegated to services)   │
+└────────────┬────────────────────────────┘
+             │
+┌────────────▼────────────────────────────┐
+│      Database (SQLAlchemy)              │
+└─────────────────────────────────────────┘
 ```
 
-### Using Specifications for Queries
+### Creating a New Route
 
 ```python
-from app.data.repositories.base import ISpecification
-from sqlalchemy.sql.elements import ColumnElement
+# app/api/routers/items.py
+from fastapi import APIRouter
+from app.api.dependencies import ItemServiceDep
+from app.data.schemas import ItemCreate, ItemRead
 
-class ItemNameSpec(ISpecification):
-    def __init__(self, name: str):
-        self.name = name
+router = APIRouter(prefix="/items", tags=["items"])
 
-    def to_sqlalchemy_filter(self) -> ColumnElement[bool]:
-        return Item.name == self.name
+@router.post("/", response_model=ItemRead, status_code=201)
+async def create_item(
+    item_data: ItemCreate,
+    service: ItemServiceDep,  # Service injected via FastAPI DI
+):
+    """Create a new item with business validation."""
+    return await service.create_item(item_data)
 
-# Use in repository
-async with SQLAlchemyUnitOfWork() as uow:
-    repo = uow.repository(Item)
-    spec = ItemNameSpec("test")
-    items = await repo.find_by_specification(uow.session, spec)
+@router.get("/{item_id}", response_model=ItemRead)
+async def get_item(item_id: int, service: ItemServiceDep):
+    """Get item by ID."""
+    return await service.get_item(item_id)
+```
+
+### Creating a Service
+
+```python
+# app/services/item_service.py
+from app.services.base import BaseService
+from app.repositories.item import ItemRepository
+
+class ItemService(BaseService):
+    @property
+    def items(self) -> ItemRepository:
+        """Lazy-load item repository."""
+        if not hasattr(self, "_items"):
+            self._items = ItemRepository(self.db)
+        return self._items
+
+    async def create_item(self, item_data: ItemCreate) -> Item:
+        """Create item with business validation."""
+        # Business rule: Check title uniqueness
+        existing = await self.items.get_by_title(item_data.title)
+        if existing:
+            raise HTTPException(400, "Title already exists")
+
+        # Create and commit
+        item = await self.items.create(obj_in=item_data)
+        await self.commit()
+        await self.refresh(item)
+        return item
+```
+
+### Creating a Repository
+
+```python
+# app/repositories/item.py
+from app.repositories.base import Repository
+from app.data.models import Item
+from app.data.schemas import ItemCreate, ItemUpdate
+
+class ItemRepository(Repository[Item, ItemCreate, ItemUpdate]):
+    def __init__(self, session: AsyncSession):
+        super().__init__(Item, session)
+
+    # Add custom queries
+    async def get_by_title(self, title: str) -> Item | None:
+        query = select(self.model).where(self.model.title == title)
+        result = await self.session.execute(query)
+        return result.scalars().first()
+```
+
+### Cross-Repository Operations
+
+```python
+# app/services/item_service.py
+class ItemService(BaseService):
+    @property
+    def items(self) -> ItemRepository:
+        if not hasattr(self, "_items"):
+            self._items = ItemRepository(self.db)
+        return self._items
+
+    @property
+    def users(self) -> UserRepository:
+        if not hasattr(self, "_users"):
+            self._users = UserRepository(self.db)
+        return self._users
+
+    async def create_item_with_owner(
+        self,
+        item_data: ItemCreate,
+        user_id: int
+    ) -> Item:
+        """Create item with owner validation (cross-repository)."""
+        # Validate user exists
+        user = await self.users.get(user_id)
+        if not user:
+            raise HTTPException(404, "User not found")
+
+        # Create item
+        item_data_dict = item_data.model_dump()
+        item_data_dict["owner_id"] = user_id
+        item = await self.items.create(ItemCreate(**item_data_dict))
+
+        # Atomic commit
+        await self.commit()
+        await self.refresh(item)
+        return item
 ```
 
 ### Using Redis
@@ -315,10 +419,10 @@ pre-commit run --all-files
 
 ### Design Patterns
 
+- **Service Layer Pattern**: Coordinates business logic and transaction boundaries
 - **Repository Pattern**: Abstracts data access logic
-- **Unit of Work**: Coordinates multiple repository operations
-- **Specification Pattern**: Encapsulates query logic
-- **Factory Pattern**: Creates objects without specifying exact classes
+- **Dependency Injection**: FastAPI's built-in DI for loose coupling
+- **Factory Pattern**: Creates objects without specifying exact classes (e.g., schema factory)
 - **Singleton Pattern**: Ensures single instance (Redis, S3 clients)
 
 ## 🔍 Infrastructure Testing
@@ -390,6 +494,15 @@ All configuration is done via environment variables. See `.env.example` for all 
 - [TESTING_INFRASTRUCTURE.md](TESTING_INFRASTRUCTURE.md) - Testing database, Redis, and S3
 - [docs/DOCKER_AND_CI.md](docs/DOCKER_AND_CI.md) - Docker setup and CI/CD workflows
 - [docs/S3_ALTERNATIVES.md](docs/S3_ALTERNATIVES.md) - S3-compatible storage options
+
+### Architecture
+
+**Service Layer Architecture**
+- Modern pattern following FastAPI best practices
+- Clear separation: Routes → Services → Repositories → Database
+- Explicit transaction management in services
+- Easy to test and maintain
+- SOLID principles throughout
 
 ## 🤝 Contributing
 

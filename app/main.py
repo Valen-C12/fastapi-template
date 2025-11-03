@@ -146,7 +146,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",  # noqa: S104  # Binding to all interfaces is intentional for development
-        port=8000,
+        port=8800,
         reload=settings.debug,
         log_level=settings.log_level.lower(),
     )

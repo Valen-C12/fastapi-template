@@ -7,10 +7,10 @@
 ## 🌟 特性
 
 ### 核心架构
+- **服务层模式 (Service Layer Pattern)** - 业务逻辑协调和事务管理
 - **仓储模式 (Repository Pattern)** - 清晰的数据访问抽象
-- **工作单元模式 (Unit of Work Pattern)** - 协调的事务管理
-- **规格模式 (Specification Pattern)** - 灵活的查询组合
-- **依赖注入 (Dependency Injection)** - 松耦合组件
+- **依赖注入 (Dependency Injection)** - 通过 FastAPI DI 实现松耦合组件
+- **SOLID 原则** - 可维护、可测试和可扩展的代码
 
 ### 数据库
 - **PostgreSQL** 配合 SQLAlchemy 2.0
@@ -158,26 +158,29 @@ API 将在以下地址可用：
 template/
 ├── app/
 │   ├── api/
-│   │   ├── routers/          # API 路由处理器
-│   │   │   ├── items.py      # 示例 CRUD 端点
-│   │   │   └── users.py      # 用户端点
-│   │   └── router_factory.py # 路由生成工具
+│   │   ├── routers/          # API 路由处理器（轻量级控制器）
+│   │   │   ├── items.py      # Item 端点
+│   │   │   ├── users.py      # User 端点
+│   │   │   └── health.py     # 健康检查端点
+│   │   └── dependencies.py   # 服务依赖注入
 │   ├── core/
 │   │   ├── config.py         # 应用配置
 │   │   ├── lifespan.py       # 启动/关闭逻辑
 │   │   ├── logging.py        # 日志中间件
 │   │   ├── exceptions.py     # 自定义异常类
 │   │   └── exception_handlers.py  # 全局异常处理器
+│   ├── services/             # 服务层（业务逻辑）
+│   │   ├── base.py           # 基础服务及事务管理
+│   │   ├── item_service.py   # Item 业务逻辑
+│   │   └── user_service.py   # User 业务逻辑
+│   ├── repositories/         # 仓储层（数据访问）
+│   │   ├── base.py           # 通用仓储基类
+│   │   ├── item.py           # Item 仓储
+│   │   └── user.py           # User 仓储
 │   ├── data/
-│   │   ├── database.py       # 数据库连接
+│   │   ├── database.py       # 数据库连接 & 会话
 │   │   ├── models.py         # SQLAlchemy 模型
-│   │   ├── schemas.py        # Pydantic 模式
-│   │   ├── crud.py           # CRUD 操作
-│   │   ├── base_crud.py      # 基础 CRUD 类
-│   │   ├── unit_of_work.py   # 工作单元实现
-│   │   └── repositories/     # 仓储模式实现
-│   │       ├── base.py       # 基础仓储 & 规格
-│   │       └── __init__.py
+│   │   └── schemas.py        # Pydantic 模式（Create/Update/Read）
 │   ├── infrastructure/       # 外部服务集成
 │   │   ├── redis_client.py   # Redis 连接 & 辅助工具
 │   │   └── s3_client.py      # S3 客户端封装
@@ -190,44 +193,145 @@ template/
 
 ## 💡 使用示例
 
-### 使用仓储模式
+### 架构概览
 
-```python
-from app.data.models import Item
-from app.data.unit_of_work import SQLAlchemyUnitOfWork
+本模板遵循**服务层模式**以实现清晰的关注点分离：
 
-async def create_item_example():
-    async with SQLAlchemyUnitOfWork() as uow:
-        # 获取 Item 模型的仓储
-        item_repo = uow.repository(Item)
-
-        # 创建新项目
-        item = Item(name="Example", description="Test item")
-        created_item = await item_repo.create(uow.session, item)
-
-        # 退出上下文时自动提交更改
-
-    return created_item
+```
+┌─────────────────────────────────────────┐
+│         路由层 (Routes)                  │
+│  - 轻量级控制器                          │
+│  - 仅处理 HTTP 相关逻辑                  │
+│  - 通过 DI 依赖服务                      │
+└────────────┬────────────────────────────┘
+             │
+┌────────────▼────────────────────────────┐
+│      服务层 (Service Layer)             │
+│  - 业务逻辑                              │
+│  - 事务管理                              │
+│  - 协调仓储                              │
+└────────────┬────────────────────────────┘
+             │
+┌────────────▼────────────────────────────┐
+│      仓储层 (Repository Layer)          │
+│  - 数据访问抽象                          │
+│  - 不直接提交（由服务层管理）            │
+└────────────┬────────────────────────────┘
+             │
+┌────────────▼────────────────────────────┐
+│      数据库 (Database)                   │
+└─────────────────────────────────────────┘
 ```
 
-### 使用规格模式查询
+### 创建新路由
 
 ```python
-from app.data.repositories.base import ISpecification
-from sqlalchemy.sql.elements import ColumnElement
+# app/api/routers/items.py
+from fastapi import APIRouter
+from app.api.dependencies import ItemServiceDep
+from app.data.schemas import ItemCreate, ItemRead
 
-class ItemNameSpec(ISpecification):
-    def __init__(self, name: str):
-        self.name = name
+router = APIRouter(prefix="/items", tags=["items"])
 
-    def to_sqlalchemy_filter(self) -> ColumnElement[bool]:
-        return Item.name == self.name
+@router.post("/", response_model=ItemRead, status_code=201)
+async def create_item(
+    item_data: ItemCreate,
+    service: ItemServiceDep,  # 通过 FastAPI DI 注入服务
+):
+    """创建新的 Item，包含业务验证。"""
+    return await service.create_item(item_data)
 
-# 在仓储中使用
-async with SQLAlchemyUnitOfWork() as uow:
-    repo = uow.repository(Item)
-    spec = ItemNameSpec("test")
-    items = await repo.find_by_specification(uow.session, spec)
+@router.get("/{item_id}", response_model=ItemRead)
+async def get_item(item_id: int, service: ItemServiceDep):
+    """根据 ID 获取 Item。"""
+    return await service.get_item(item_id)
+```
+
+### 创建服务
+
+```python
+# app/services/item_service.py
+from app.services.base import BaseService
+from app.repositories.item import ItemRepository
+
+class ItemService(BaseService):
+    @property
+    def items(self) -> ItemRepository:
+        """延迟加载 item 仓储。"""
+        if not hasattr(self, "_items"):
+            self._items = ItemRepository(self.db)
+        return self._items
+
+    async def create_item(self, item_data: ItemCreate) -> Item:
+        """创建 item，包含业务验证。"""
+        # 业务规则：检查标题唯一性
+        existing = await self.items.get_by_title(item_data.title)
+        if existing:
+            raise HTTPException(400, "标题已存在")
+
+        # 创建并提交
+        item = await self.items.create(obj_in=item_data)
+        await self.commit()
+        await self.refresh(item)
+        return item
+```
+
+### 创建仓储
+
+```python
+# app/repositories/item.py
+from app.repositories.base import Repository
+from app.data.models import Item
+from app.data.schemas import ItemCreate, ItemUpdate
+
+class ItemRepository(Repository[Item, ItemCreate, ItemUpdate]):
+    def __init__(self, session: AsyncSession):
+        super().__init__(Item, session)
+
+    # 添加自定义查询
+    async def get_by_title(self, title: str) -> Item | None:
+        query = select(self.model).where(self.model.title == title)
+        result = await self.session.execute(query)
+        return result.scalars().first()
+```
+
+### 跨仓储操作
+
+```python
+# app/services/item_service.py
+class ItemService(BaseService):
+    @property
+    def items(self) -> ItemRepository:
+        if not hasattr(self, "_items"):
+            self._items = ItemRepository(self.db)
+        return self._items
+
+    @property
+    def users(self) -> UserRepository:
+        if not hasattr(self, "_users"):
+            self._users = UserRepository(self.db)
+        return self._users
+
+    async def create_item_with_owner(
+        self,
+        item_data: ItemCreate,
+        user_id: int
+    ) -> Item:
+        """创建带所有者验证的 item（跨仓储操作）。"""
+        # 验证用户存在
+        user = await self.users.get(user_id)
+        if not user:
+            raise HTTPException(404, "用户不存在")
+
+        # 创建 item
+        item_data_dict = item_data.model_dump()
+        item_data_dict["owner_id"] = user_id
+        item = await self.items.create(ItemCreate(**item_data_dict))
+
+        # 原子提交
+        await self.commit()
+        await self.refresh(item)
+        return item
 ```
 
 ### 使用 Redis
@@ -315,9 +419,9 @@ pre-commit run --all-files
 
 ### 设计模式
 
+- **服务层模式 (Service Layer Pattern)**: 协调业务逻辑和事务边界
 - **仓储模式 (Repository Pattern)**: 抽象数据访问逻辑
-- **工作单元 (Unit of Work)**: 协调多个仓储操作
-- **规格模式 (Specification Pattern)**: 封装查询逻辑
+- **依赖注入 (Dependency Injection)**: FastAPI 内置 DI 实现松耦合
 - **工厂模式 (Factory Pattern)**: 创建对象而不指定具体类
 - **单例模式 (Singleton Pattern)**: 确保单一实例（Redis、S3 客户端）
 
@@ -390,6 +494,15 @@ docker run -p 8000:8000 --env-file .env fastapi-template
 - [TESTING_INFRASTRUCTURE_zh.md](TESTING_INFRASTRUCTURE_zh.md) - 测试数据库、Redis 和 S3
 - [docs/DOCKER_AND_CI_zh.md](docs/DOCKER_AND_CI_zh.md) - Docker 设置和 CI/CD 工作流
 - [docs/S3_ALTERNATIVES_zh.md](docs/S3_ALTERNATIVES_zh.md) - S3 兼容存储选项
+
+### 架构说明
+
+**服务层架构**
+- 遵循 FastAPI 最佳实践的现代模式
+- 清晰的分层：路由 → 服务 → 仓储 → 数据库
+- 服务层显式管理事务
+- 易于测试和维护
+- 全程贯彻 SOLID 原则
 
 ## 🤝 贡献
 
